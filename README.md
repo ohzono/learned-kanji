@@ -5,7 +5,7 @@ Check whether Japanese text uses only the kanji that have been taught by a given
 日本の学習指導要領に基づき、文章が「その学年までに習う漢字」だけで書かれているかを判定します。
 
 - Based on the official tables: 学年別漢字配当表 (1026 kanji, grades 1–6) and 常用漢字表 (2136 kanji)
-- Zero dependencies, ~15 KB, works in browsers and Node.js (ESM / CJS, TypeScript types included)
+- Zero dependencies, ~16 KB, works in browsers and Node.js (ESM / CJS, TypeScript types included)
 - Fast: one pass over the string with a `Uint8Array` lookup, no regular expressions
 
 ```sh
@@ -77,6 +77,10 @@ Note that 𠮟 is U+20B9F, outside the BMP. It is handled correctly.
 ### What is ignored
 
 Only kanji are judged. Hiragana, katakana, Latin letters, digits, punctuation, emoji and the iteration mark 々 always pass. Every CJK ideograph that is not in the tables (CJK Unified Ideographs, Extension A, Extension B and later, compatibility ideographs) fails.
+
+Radical characters (CJK Radicals Supplement and Kangxi Radicals, U+2E80–U+2FDF) also fail. They look identical to real kanji — `⼭` U+2F2D renders like `山` — and usually get into text through copy and paste from PDFs, so letting them pass would defeat the check.
+
+The text is not normalized. Enclosed and squared forms such as ㈱ ㊙ ㍻ are treated as symbols and pass; call `text.normalize('NFKC')` first if you want them judged as 株 秘 平成.
 
 Readings are not considered: a kanji counts as learned from the grade it is allocated to, even if a particular reading is taught later.
 

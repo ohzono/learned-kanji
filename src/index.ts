@@ -1,4 +1,4 @@
-import { GRADE_1, GRADE_2, GRADE_3, GRADE_4, GRADE_5, GRADE_6, SECONDARY } from './data';
+import { GRADE_1, GRADE_2, GRADE_3, GRADE_4, GRADE_5, GRADE_6, SECONDARY } from './data.ts';
 
 /**
  * School year in Japan: 1–6 = 小学校, 7–9 = 中学校1–3年.
@@ -27,6 +27,8 @@ export const SOURCE = {
 
 const BASE = 0x4e00;
 const END = 0x9fff;
+const RADICALS = 0x2e80;
+const RADICALS_END = 0x2fdf;
 const SECONDARY_LEVEL = 7;
 const VARIANT = 0x10;
 // 𠮟 is the only 常用漢字 outside the BMP.
@@ -56,15 +58,57 @@ function limitOf(grade: Grade): number {
   return grade > 6 ? SECONDARY_LEVEL : grade;
 }
 
-/** Level of a code point: 0 = kanji that is not taught, 1–7 = level, -1 = not a kanji. */
-function levelOf(cp: number, mask: number): number {
-  if (cp >= BASE && cp <= END) return table[cp - BASE] & mask;
+/** Level of a code point outside the table range: 0 = kanji that is not taught, 7 = 𠮟, -1 = not a kanji. */
+function levelOutsideTable(cp: number): number {
   if (cp === SHIKARU) return SECONDARY_LEVEL;
+  // Radicals (CJK Radicals Supplement, Kangxi Radicals: look-alikes such as ⼭ U+2F2D for 山),
   // Extension A, compatibility ideographs, Extension B and beyond
-  if ((cp >= 0x3400 && cp <= 0x4dbf) || (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0x20000 && cp <= 0x3ffff)) {
+  if (
+    (cp >= RADICALS && cp <= RADICALS_END) ||
+    (cp >= 0x3400 && cp <= 0x4dbf) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0x20000 && cp <= 0x3ffff)
+  ) {
     return 0;
   }
   return -1;
+}
+
+function levelOf(cp: number, mask: number): number {
+  return cp >= BASE && cp <= END ? table[cp - BASE] & mask : levelOutsideTable(cp);
+}
+
+function maskOf(options?: Options): number {
+  return options?.strict ? 0xff : 0x0f;
+}
+
+/**
+ * The single scanning loop. Collects offending code points into `found`, or
+ * returns false at the first one when `found` is null. O(n), no allocation.
+ */
+function scan(text: string, limit: number, mask: number, found: Set<number> | null): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c < RADICALS) continue; // ASCII and other non-CJK text
+    let cp = c;
+    let v: number;
+    if (c >= BASE && c <= END) {
+      v = table[c - BASE] & mask;
+    } else if (c > RADICALS_END && c < 0x3400) {
+      continue; // kana and CJK punctuation
+    } else {
+      if (c >= 0xd800 && c <= 0xdbff) {
+        cp = text.codePointAt(i)!;
+        if (cp > 0xffff) i++;
+      }
+      v = levelOutsideTable(cp);
+    }
+    if (v === 0 || v > limit) {
+      if (found === null) return false;
+      found.add(cp);
+    }
+  }
+  return found === null || found.size === 0;
 }
 
 /**
@@ -72,38 +116,13 @@ function levelOf(cp: number, mask: number): number {
  * Kana, Latin letters, digits, punctuation and 々 are ignored.
  */
 export function isLearnedBy(text: string, grade: Grade, options?: Options): boolean {
-  const limit = limitOf(grade);
-  const mask = options?.strict ? 0xff : 0x0f;
-  for (let i = 0; i < text.length; i++) {
-    const c = text.charCodeAt(i);
-    if (c < 0x3400) continue;
-    if (c >= BASE && c <= END) {
-      const v = table[c - BASE] & mask;
-      if (v === 0 || v > limit) return false;
-      continue;
-    }
-    const cp = text.codePointAt(i)!;
-    if (cp > 0xffff) i++;
-    const v = levelOf(cp, mask);
-    if (v === 0 || v > limit) return false;
-  }
-  return true;
+  return scan(text, limitOf(grade), maskOf(options), null);
 }
 
 /** Kanji in `text` that have not been taught by the end of `grade`, unique, in order of appearance. */
 export function unlearnedKanji(text: string, grade: Grade, options?: Options): string[] {
-  const limit = limitOf(grade);
-  const mask = options?.strict ? 0xff : 0x0f;
-  // Code points, not strings: nothing is allocated for text that passes.
   const found = new Set<number>();
-  for (let i = 0; i < text.length; i++) {
-    const c = text.charCodeAt(i);
-    if (c < 0x3400) continue;
-    const cp = c >= 0xd800 && c <= 0xdbff ? text.codePointAt(i)! : c;
-    if (cp > 0xffff) i++;
-    const v = levelOf(cp, mask);
-    if (v === 0 || v > limit) found.add(cp);
-  }
+  scan(text, limitOf(grade), maskOf(options), found);
   return Array.from(found, (cp) => String.fromCodePoint(cp));
 }
 
@@ -111,7 +130,7 @@ export function unlearnedKanji(text: string, grade: Grade, options?: Options): s
 export function levelOfKanji(char: string, options?: Options): KanjiLevel | undefined {
   const cp = char.codePointAt(0);
   if (cp === undefined || char.length !== (cp > 0xffff ? 2 : 1)) return undefined;
-  const v = levelOf(cp, options?.strict ? 0xff : 0x0f);
+  const v = levelOf(cp, maskOf(options));
   if (v < 1 || v > SECONDARY_LEVEL) return undefined;
   return v === SECONDARY_LEVEL ? 'secondary' : (v as KanjiLevel);
 }
