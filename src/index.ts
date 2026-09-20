@@ -94,12 +94,17 @@ export function isLearnedBy(text: string, grade: Grade, options?: Options): bool
 export function unlearnedKanji(text: string, grade: Grade, options?: Options): string[] {
   const limit = limitOf(grade);
   const mask = options?.strict ? 0xff : 0x0f;
-  const found = new Set<string>();
-  for (const ch of text) {
-    const v = levelOf(ch.codePointAt(0)!, mask);
-    if (v === 0 || v > limit) found.add(ch);
+  // Code points, not strings: nothing is allocated for text that passes.
+  const found = new Set<number>();
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c < 0x3400) continue;
+    const cp = c >= 0xd800 && c <= 0xdbff ? text.codePointAt(i)! : c;
+    if (cp > 0xffff) i++;
+    const v = levelOf(cp, mask);
+    if (v === 0 || v > limit) found.add(cp);
   }
-  return [...found];
+  return Array.from(found, (cp) => String.fromCodePoint(cp));
 }
 
 /** Where `char` is first taught, or `undefined` when it is not a taught kanji. */
