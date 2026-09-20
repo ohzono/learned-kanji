@@ -4,6 +4,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # TypeScript 7 ships native binaries as 20 platform packages, which breaks the
+      # single-dev-dependency policy checked by scripts/check-dependencies.mjs.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
     cooldown:
       default-days: 7
   - package-ecosystem: github-actions

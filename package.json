@@ -47,11 +47,11 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test \"test/*.test.ts\"",
-    "test:dist": "node --test \"test/dist/*.test.mjs\"",
+    "test:dist": "node --test test/smoke/smoke.test.mjs",
     "bench": "node bench.mjs",
     "prepublishOnly": "npm run typecheck && npm test && npm run build && npm run test:dist"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "~5.9.3"
   }
 }
